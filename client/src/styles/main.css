@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #D0BCFF;
+  --color-on-primary: #381E72;
+  --color-primary-container: #4F378B;
+  --color-on-primary-container: #EADDFF;
+
+  --color-secondary: #CCC2DC;
+  --color-on-secondary: #332D41;
+
+  --color-surface: #1C1B1F;
+  --color-on-surface: #E6E1E9;
+  --color-surface-variant: #49454F;
+  --color-on-surface-variant: #CAC4D0;
+  --color-outline: #938F99;
+
+  --color-surface-container-low: #1D1B20;
+  --color-surface-container: #211F26;
+  --color-surface-container-high: #2B2930;
+}
+
+:root {
+  --bg-color: #1C1B1F;
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+body {
+  margin: 0;
+  font-family: 'Roboto', 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-color);
+  color: #E6E1E9;
+  overflow: hidden;
+}
+
+/* Global focus and utilities */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+#root {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+}
+
+/* M3 Elevation & Surfaces */
+.surface {
+  background-color: #211F26;
+  /* surface-container */
+}
+
+.surface-variant {
+  background-color: #49454F;
+}
+
+.xterm .xterm-viewport {
+  overflow-y: auto !important;
+}
