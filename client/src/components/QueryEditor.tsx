@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
+import QuerySidebar from './QuerySidebar';
 
 interface QueryEditorProps {
     sql: string;
@@ -16,6 +17,46 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: null });
+    const [editorHeight, setEditorHeight] = useState(40); // Initial height percentage for editor
+    const isResizing = useRef(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [showQuerySidebar, setShowQuerySidebar] = useState(false);
+
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!isResizing.current || !containerRef.current) return;
+
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const newHeight = ((e.clientY - containerRect.top) / containerRect.height) * 100;
+
+        // Constraint: between 10% and 90%
+        if (newHeight > 10 && newHeight < 90) {
+            setEditorHeight(newHeight);
+            window.dispatchEvent(new Event('resize'));
+        }
+    }, []);
+
+    const stopResizing = useCallback(() => {
+        isResizing.current = false;
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', stopResizing);
+        document.body.style.cursor = 'default';
+        document.body.style.userSelect = 'auto';
+    }, [handleMouseMove]);
+
+    const startResizing = useCallback(() => {
+        isResizing.current = true;
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', stopResizing);
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+    }, [handleMouseMove, stopResizing]);
+
+    useEffect(() => {
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', stopResizing);
+        };
+    }, [handleMouseMove, stopResizing]);
 
     const handleEditorDidMount = (_editor: any, monaco: any) => {
         // Define SQL snippets
@@ -89,12 +130,24 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
                 setError(data.error);
             } else {
                 setResults(data.rows);
+                // Save to history on success
+                saveToHistory(sql);
             }
         } catch (err: any) {
             setError(err.message);
         } finally {
             setLoading(false);
         }
+    };
+
+    const saveToHistory = (querySql: string) => {
+        const history = JSON.parse(localStorage.getItem('quackshell_history') || '[]');
+        // Don't save if same as last
+        if (history[0] === querySql) return;
+
+        const newHistory = [querySql, ...history.filter((s: string) => s !== querySql)].slice(0, 50);
+        localStorage.setItem('quackshell_history', JSON.stringify(newHistory));
+        // Force re-render of sidebar if it's open (it will reload via useEffect if we add a key or trigger)
     };
 
     const sortedResults = useMemo(() => {
@@ -132,25 +185,71 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
         });
     };
 
+    const downloadCSV = () => {
+        if (!sortedResults || sortedResults.length === 0) return;
+
+        const headers = Object.keys(sortedResults[0]).join(',');
+        const rows = sortedResults.map(row =>
+            Object.values(row).map(val => {
+                const s = String(val).replace(/"/g, '""');
+                return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
+            }).join(',')
+        );
+        const csvContent = [headers, ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'quackshell_results.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
-        <div className="flex flex-col h-full bg-transparent">
+        <div ref={containerRef} className="flex flex-col h-full bg-transparent overflow-hidden">
             {/* Editor Area */}
-            <div className="relative flex flex-col h-1/2 border-b border-outline/10 overflow-hidden">
-                <Editor
-                    height="100%"
-                    defaultLanguage="sql"
-                    value={sql}
-                    onChange={(value) => setSql(value || '')}
-                    theme="vs-dark"
-                    onMount={handleEditorDidMount}
-                    options={{
-                        minimap: { enabled: false },
-                        fontSize: 14,
-                        padding: { top: 16 },
-                        automaticLayout: true,
-                        scrollBeyondLastLine: false,
-                    }}
-                />
+            <div
+                className="relative flex flex-col border-b border-outline/10 overflow-hidden"
+                style={{ height: `${editorHeight}%`, flex: 'none' }}
+            >
+                <div className="flex grow min-h-0">
+                    {showQuerySidebar && (
+                        <QuerySidebar
+                            onSelectQuery={(sql) => setSql(sql)}
+                            currentSql={sql}
+                        />
+                    )}
+                    <div className="flex-1 relative">
+                        <Editor
+                            height="100%"
+                            defaultLanguage="sql"
+                            value={sql}
+                            onChange={(value) => setSql(value || '')}
+                            theme="vs-dark"
+                            onMount={handleEditorDidMount}
+                            options={{
+                                minimap: { enabled: false },
+                                fontSize: 14,
+                                padding: { top: 16 },
+                                automaticLayout: true,
+                                scrollBeyondLastLine: false,
+                            }}
+                        />
+                    </div>
+                </div>
+
+                {/* Sidebar Toggle Button */}
+                <button
+                    onClick={() => setShowQuerySidebar(!showQuerySidebar)}
+                    className={`absolute left-4 bottom-6 z-20 flex items-center justify-center w-12 h-12 rounded-2xl shadow-lg transition-all active:scale-95 ${showQuerySidebar ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-variant'}`}
+                    title="Toggle Query History"
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </button>
 
                 {/* M3 Floating Action Button Styled Run Button */}
                 <button
@@ -165,8 +264,16 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
                 </button>
             </div>
 
+            {/* Vertical Resizer Handle */}
+            <div
+                className="h-1 cursor-row-resize group flex items-center justify-center transition-all z-10 -my-0.5"
+                onMouseDown={startResizing}
+            >
+                <div className="h-[1px] w-12 bg-outline/20 group-hover:bg-primary transition-colors rounded-full"></div>
+            </div>
+
             {/* Results Area */}
-            <div className="flex-1 overflow-auto bg-surface-container-low p-6">
+            <div className="grow overflow-auto bg-surface-container-low p-6">
                 {error && (
                     <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-5 rounded-3xl text-sm font-medium mb-6 flex items-start gap-4">
                         <div className="shrink-0 w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center text-xs">!</div>
@@ -178,42 +285,60 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
                 )}
 
                 {sortedResults && sortedResults.length > 0 && (
-                    <div className="bg-surface rounded-3xl border border-outline/10 overflow-x-auto shadow-sm">
-                        <table className="min-w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-surface-variant">
-                                    {Object.keys(sortedResults[0]).map((col) => (
-                                        <th
-                                            key={col}
-                                            onClick={() => handleSort(col)}
-                                            className="px-5 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline/10 whitespace-nowrap cursor-pointer hover:bg-on-surface-variant/10 transition-colors group select-none"
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                {col}
-                                                <span className={`transition-all duration-300 ${sortConfig.key === col ? 'opacity-100 scale-100' : 'opacity-0 scale-50 group-hover:opacity-30'}`}>
-                                                    {sortConfig.key === col && sortConfig.direction === 'desc' ? (
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5z" /></svg>
-                                                    ) : (
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z" /></svg>
-                                                    )}
-                                                </span>
-                                            </div>
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-outline/5">
-                                {sortedResults.map((row, i) => (
-                                    <tr key={i} className="hover:bg-surface-variant/30 transition-colors">
-                                        {Object.values(row).map((val, j) => (
-                                            <td key={j} className="px-5 py-4 text-sm text-on-surface/80 font-mono whitespace-nowrap">
-                                                {String(val)}
-                                            </td>
+                    <div className="flex flex-col gap-4">
+                        <div className="flex items-center justify-between px-2">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">
+                                {sortedResults.length} {sortedResults.length === 1 ? 'row' : 'rows'} found
+                            </span>
+                            <button
+                                onClick={downloadCSV}
+                                className="flex items-center gap-2 px-4 py-2 bg-surface-variant hover:bg-primary/10 text-on-surface-variant hover:text-primary rounded-full text-xs font-bold transition-all active:scale-95"
+                            >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                Export CSV
+                            </button>
+                        </div>
+                        <div className="bg-surface rounded-3xl border border-outline/10 overflow-x-auto shadow-sm">
+                            <table className="min-w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-surface-variant">
+                                        {Object.keys(sortedResults[0]).map((col) => (
+                                            <th
+                                                key={col}
+                                                onClick={() => handleSort(col)}
+                                                className="px-5 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline/10 whitespace-nowrap cursor-pointer hover:bg-on-surface-variant/10 transition-colors group select-none"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    {col}
+                                                    <span className={`transition-all duration-300 ${sortConfig.key === col ? 'opacity-100 scale-100' : 'opacity-0 scale-50 group-hover:opacity-30'}`}>
+                                                        {sortConfig.key === col && sortConfig.direction === 'desc' ? (
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5z" /></svg>
+                                                        ) : (
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z" /></svg>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            </th>
                                         ))}
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-outline/5">
+                                    {sortedResults.map((row, i) => (
+                                        <tr key={i} className="hover:bg-surface-variant/30 transition-colors">
+                                            {Object.values(row).map((val, j) => (
+                                                <td key={j} className="px-5 py-4 text-sm text-on-surface/80 font-mono whitespace-nowrap">
+                                                    {String(val)}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
 
