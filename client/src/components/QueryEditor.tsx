@@ -15,7 +15,7 @@ type SortConfig = {
 const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
     const [results, setResults] = useState<any[] | null>(null);
     const [schema, setSchema] = useState<any[] | null>(null);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: null });
     const [editorHeight, setEditorHeight] = useState(40); // Initial height percentage for editor
@@ -29,7 +29,6 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
         const containerRect = containerRef.current.getBoundingClientRect();
         const newHeight = ((e.clientY - containerRect.top) / containerRect.height) * 100;
 
-        // Constraint: between 10% and 90%
         if (newHeight > 10 && newHeight < 90) {
             setEditorHeight(newHeight);
             window.dispatchEvent(new Event('resize'));
@@ -59,81 +58,24 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
         };
     }, [handleMouseMove, stopResizing]);
 
-    const handleEditorDidMount = (_editor: any, monaco: any) => {
-        // Define SQL snippets
-        monaco.languages.registerCompletionItemProvider('sql', {
-            provideCompletionItems: (_model: any, _position: any) => {
-                const suggestions = [
-                    {
-                        label: 'SELECT * FROM',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'SELECT * FROM ${1:table_name};',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'Select all columns from a table'
-                    },
-                    {
-                        label: 'INSERT INTO',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'INSERT INTO ${1:table_name} (${2:columns}) VALUES (${3:values});',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'Insert a new row'
-                    },
-                    {
-                        label: 'CREATE TABLE',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'CREATE TABLE ${1:table_name} (\n\t${2:column_name} ${3:type}\n);',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'Create a new table'
-                    },
-                    {
-                        label: 'DROP TABLE',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'DROP TABLE IF EXISTS ${1:table_name};',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'Drop a table if it exists'
-                    },
-                    {
-                        label: 'ALTER TABLE',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:type};',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'Add a column to a table'
-                    },
-                    {
-                        label: 'WITH ... AS',
-                        kind: monaco.languages.CompletionItemKind.Snippet,
-                        insertText: 'WITH ${1:cte_name} AS (\n\tSELECT *\n\tFROM ${2:table_name}\n)\nSELECT * FROM ${1:cte_name};',
-                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                        documentation: 'Common Table Expression'
-                    }
-                ];
-                return { suggestions: suggestions };
-            }
-        });
-    };
-
     const runQuery = async () => {
         setLoading(true);
         setError(null);
-        setResults(null);
-        setSchema(null);
-        setSortConfig({ key: null, direction: null });
-
         try {
-            const response = await fetch('http://localhost:3001/api/query', {
+            const res = await fetch('http://localhost:3001/api/query', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({ sql }),
             });
-
-            const data = await response.json();
-
+            const data = await res.json();
             if (data.error) {
                 setError(data.error);
+                setResults(null);
             } else {
-                setResults(data.rows);
+                setResults(data.rows || []);
                 setSchema(data.schema || null);
-                // Save to history on success
                 saveToHistory(sql);
             }
         } catch (err: any) {
@@ -144,66 +86,66 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
     };
 
     const saveToHistory = (querySql: string) => {
-        const history = JSON.parse(localStorage.getItem('quackshell_history') || '[]');
-        // Don't save if same as last
-        if (history[0] === querySql) return;
+        const history = JSON.parse(localStorage.getItem('queryHistory') || '[]');
+        const newHistory = [querySql, ...history.filter((h: string) => h !== querySql)].slice(0, 50);
+        localStorage.setItem('queryHistory', JSON.stringify(newHistory));
+    };
 
-        const newHistory = [querySql, ...history.filter((s: string) => s !== querySql)].slice(0, 50);
-        localStorage.setItem('quackshell_history', JSON.stringify(newHistory));
-        // Force re-render of sidebar if it's open (it will reload via useEffect if we add a key or trigger)
+    const handleSort = (key: string) => {
+        let direction: 'asc' | 'desc' | null = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
+            direction = null;
+        }
+        setSortConfig({ key, direction });
     };
 
     const sortedResults = useMemo(() => {
-        if (!results || !sortConfig.key || !sortConfig.direction) return results;
+        if (!results) return null;
+        if (!sortConfig.key || !sortConfig.direction) return results;
 
         return [...results].sort((a, b) => {
-            const aVal = a[sortConfig.key!];
-            const bVal = b[sortConfig.key!];
+            const v1 = a[sortConfig.key!];
+            const v2 = b[sortConfig.key!];
 
-            if (aVal === bVal) return 0;
+            if (v1 === v2) return 0;
+            if (v1 === null) return 1;
+            if (v2 === null) return -1;
 
-            // Handle nulls
-            if (aVal == null) return 1;
-            if (bVal == null) return -1;
-
-            const direction = sortConfig.direction === 'asc' ? 1 : -1;
-
-            // Numeric compare
-            if (typeof aVal === 'number' && typeof bVal === 'number') {
-                return (aVal - bVal) * direction;
-            }
-
-            // String compare
-            return String(aVal).localeCompare(String(bVal), undefined, { numeric: true, sensitivity: 'base' }) * direction;
+            const comparison = v1 < v2 ? -1 : 1;
+            return sortConfig.direction === 'asc' ? comparison : -comparison;
         });
     }, [results, sortConfig]);
 
-    const handleSort = (key: string) => {
-        setSortConfig((prev) => {
-            if (prev.key === key) {
-                if (prev.direction === 'asc') return { key, direction: 'desc' };
-                return { key: null, direction: null };
-            }
-            return { key, direction: 'asc' };
-        });
-    };
+    const displayedResults = useMemo(() => {
+        if (!sortedResults) return null;
+        return sortedResults.slice(0, 1000);
+    }, [sortedResults]);
 
     const downloadCSV = () => {
         if (!sortedResults || sortedResults.length === 0) return;
 
-        const headers = Object.keys(sortedResults[0]).join(',');
-        const rows = sortedResults.map(row =>
-            Object.values(row).map(val => {
-                const s = String(val).replace(/"/g, '""');
-                return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
-            }).join(',')
-        );
-        const csvContent = [headers, ...rows].join('\n');
+        const headers = Object.keys(sortedResults[0]);
+        const csvContent = [
+            headers.join(','),
+            ...sortedResults.map(row =>
+                headers.map(header => {
+                    const val = row[header];
+                    if (val === null) return '';
+                    const str = String(val);
+                    return str.includes(',') || str.includes('"') || str.includes('\n')
+                        ? `"${str.replace(/"/g, '""')}"`
+                        : str;
+                }).join(',')
+            )
+        ].join('\n');
+
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
-        link.setAttribute('download', 'quackshell_results.csv');
+        link.setAttribute('download', `query_results_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -211,163 +153,161 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
     };
 
     return (
-        <div ref={containerRef} className="flex flex-col h-full bg-transparent overflow-hidden">
+        <div ref={containerRef} className="flex flex-col h-full w-full overflow-hidden bg-surface-container-lowest">
             {/* Editor Area */}
-            <div
-                className="relative flex flex-col border-b border-outline/10 overflow-hidden"
-                style={{ height: `${editorHeight}%`, flex: 'none' }}
-            >
-                <div className="flex grow min-h-0">
-                    {showQuerySidebar && (
-                        <QuerySidebar
-                            onSelectQuery={(sql) => setSql(sql)}
-                            currentSql={sql}
-                        />
-                    )}
-                    <div className="flex-1 relative">
-                        <Editor
-                            height="100%"
-                            defaultLanguage="sql"
-                            value={sql}
-                            onChange={(value) => setSql(value || '')}
-                            theme="vs-dark"
-                            onMount={handleEditorDidMount}
-                            options={{
-                                minimap: { enabled: false },
-                                fontSize: 14,
-                                padding: { top: 16 },
-                                automaticLayout: true,
-                                scrollBeyondLastLine: false,
-                            }}
-                        />
-                    </div>
+            <div className="relative flex flex-col overflow-hidden shrink-0" style={{ height: `${editorHeight}%` }}>
+                <div className="grow relative min-h-0 w-full">
+                    <Editor
+                        height="100%"
+                        defaultLanguage="sql"
+                        theme="vs-dark"
+                        value={sql}
+                        onChange={(value) => setSql(value || '')}
+                        options={{
+                            minimap: { enabled: false },
+                            fontSize: 14,
+                            scrollBeyondLastLine: false,
+                            padding: { top: 16, bottom: 16 },
+                            lineNumbers: 'on',
+                            renderLineHighlight: 'all',
+                            automaticLayout: true,
+                            fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace",
+                        }}
+                    />
                 </div>
 
-                {/* Sidebar Toggle Button */}
+                <QuerySidebar
+                    isOpen={showQuerySidebar}
+                    onClose={() => setShowQuerySidebar(false)}
+                    currentSql={sql}
+                    onSelectQuery={(sql) => {
+                        setSql(sql);
+                        setShowQuerySidebar(false);
+                    }}
+                />
+
                 <button
                     onClick={() => setShowQuerySidebar(!showQuerySidebar)}
-                    className={`absolute left-4 bottom-6 z-20 flex items-center justify-center w-12 h-12 rounded-2xl shadow-lg transition-all active:scale-95 ${showQuerySidebar ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-variant'}`}
-                    title="Toggle Query History"
+                    className={`absolute left-6 bottom-6 z-20 p-4 rounded-[16px] shadow-sm transition-all flex items-center gap-2 group ${showQuerySidebar ? 'bg-primary text-on-primary' : 'bg-surface-container border border-outline/10 text-on-surface-variant hover:bg-surface-variant'}`}
                 >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </button>
 
-                {/* M3 Floating Action Button Styled Run Button */}
                 <button
                     className="absolute right-8 bottom-6 z-20 flex items-center gap-3 px-6 py-4 bg-primary text-on-primary rounded-[16px] shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 group"
                     onClick={runQuery}
                     disabled={loading}
                 >
-                    <svg className={`w-5 h-5 ${loading ? 'animate-spin' : 'group-hover:translate-x-1 transition-transform'}`} viewBox="0 0 24 24" fill="currentColor">
+                    <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="currentColor">
                         <path d="M5 3l14 9-14 9V3z" />
                     </svg>
                     <span className="font-bold text-sm tracking-wide">{loading ? 'RUNNING...' : 'EXECUTE'}</span>
                 </button>
             </div>
 
-            {/* Vertical Resizer Handle */}
+            {/* Resizer */}
             <div
-                className="h-1 cursor-row-resize group flex items-center justify-center transition-all z-10 -my-0.5"
+                className="h-1 cursor-row-resize group flex items-center justify-center transition-all z-10 -my-0.5 bg-outline/5 hover:bg-primary/20"
                 onMouseDown={startResizing}
             >
                 <div className="h-[1px] w-12 bg-outline/20 group-hover:bg-primary transition-colors rounded-full"></div>
             </div>
 
             {/* Results Area */}
-            <div className="grow overflow-auto bg-surface-container-low p-6">
-                {error && (
-                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-5 rounded-3xl text-sm font-medium mb-6 flex items-start gap-4">
-                        <div className="shrink-0 w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center text-xs">!</div>
-                        <div>
+            <div className="grow overflow-hidden flex flex-col bg-surface-container-low min-h-0">
+                <div className="grow overflow-auto p-6 relative">
+                    {error && (
+                        <div className="bg-error/10 border border-error/20 text-error p-5 rounded-3xl text-sm font-medium mb-6 animate-in slide-in-from-bottom-2">
                             <div className="font-bold uppercase text-[10px] tracking-widest mb-1 opacity-60">Query Error</div>
                             {error}
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {sortedResults && sortedResults.length > 0 && (
-                    <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between px-2">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">
-                                {sortedResults.length} {sortedResults.length === 1 ? 'row' : 'rows'} found
-                            </span>
-                            <button
-                                onClick={downloadCSV}
-                                className="flex items-center gap-2 px-4 py-2 bg-surface-variant hover:bg-primary/10 text-on-surface-variant hover:text-primary rounded-full text-xs font-bold transition-all active:scale-95"
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                    <polyline points="7 10 12 15 17 10" />
-                                    <line x1="12" y1="15" x2="12" y2="3" />
-                                </svg>
-                                Export CSV
-                            </button>
+                    {!results && !loading && !error && (
+                        <div className="h-full flex flex-col items-center justify-center opacity-20 gap-4">
+                            <div className="text-6xl text-primary drop-shadow-sm">⚡</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.3em]">Ready to Compute</div>
                         </div>
-                        <div className="bg-surface rounded-3xl border border-outline/10 overflow-x-auto shadow-sm">
-                            <table className="min-w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-surface-variant">
-                                        {Object.keys(sortedResults[0]).map((col) => {
-                                            const colType = schema?.find(s => s.column_name === col)?.column_type;
-                                            return (
-                                                <th
-                                                    key={col}
-                                                    onClick={() => handleSort(col)}
-                                                    className="px-5 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline/10 whitespace-nowrap cursor-pointer hover:bg-on-surface-variant/10 transition-colors group select-none"
-                                                >
-                                                    <div className="flex flex-col gap-0.5">
-                                                        <div className="flex items-center gap-2">
-                                                            {col}
-                                                            <span className={`transition-all duration-300 ${sortConfig.key === col ? 'opacity-100 scale-100' : 'opacity-0 scale-50 group-hover:opacity-30'}`}>
-                                                                {sortConfig.key === col && sortConfig.direction === 'desc' ? (
-                                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5z" /></svg>
-                                                                ) : (
-                                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z" /></svg>
+                    )}
+
+                    {loading && (
+                        <div className="h-full flex flex-col items-center justify-center gap-4 animate-pulse opacity-40">
+                            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.3em]">Executing...</div>
+                        </div>
+                    )}
+
+                    {displayedResults && (
+                        <div className="flex flex-col gap-4">
+                            <div className="flex items-center justify-between px-2 shrink-0">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">
+                                    {results?.length === 0 ? 'Query successful (0 rows)' : `Showing ${displayedResults.length} of ${results?.length} rows`}
+                                </span>
+                                {displayedResults.length > 0 && (
+                                    <button
+                                        onClick={downloadCSV}
+                                        className="flex items-center gap-2 px-4 py-2 bg-surface-variant text-on-surface-variant rounded-xl text-xs font-bold transition-all border border-outline/10 hover:bg-primary/10 hover:text-primary"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                            <polyline points="7 10 12 15 17 10" />
+                                            <line x1="12" y1="15" x2="12" y2="3" />
+                                        </svg>
+                                        Export CSV
+                                    </button>
+                                )}
+                            </div>
+
+                            {displayedResults.length > 0 && (
+                                <div className="bg-surface rounded-3xl border border-outline/10 overflow-x-auto shadow-sm">
+                                    <table className="min-w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-surface-variant/50 sticky top-0 z-10 backdrop-blur-sm">
+                                                {Object.keys(displayedResults[0]).map((col) => {
+                                                    const colType = schema?.find(s => s.column_name === col)?.column_type;
+                                                    return (
+                                                        <th
+                                                            key={col}
+                                                            onClick={() => handleSort(col)}
+                                                            className="px-5 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline/10 whitespace-nowrap cursor-pointer hover:bg-primary/10 transition-colors select-none group"
+                                                        >
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <div className="flex items-center gap-2">
+                                                                    {col}
+                                                                    <span className={`transition-opacity ${sortConfig.key === col ? 'opacity-100' : 'opacity-0 group-hover:opacity-30'}`}>
+                                                                        {sortConfig.key === col && sortConfig.direction === 'desc' ? '↑' : '↓'}
+                                                                    </span>
+                                                                </div>
+                                                                {colType && (
+                                                                    <span className="text-[9px] lowercase font-medium opacity-40 font-mono tracking-normal">
+                                                                        {colType}
+                                                                    </span>
                                                                 )}
-                                                            </span>
-                                                        </div>
-                                                        {colType && (
-                                                            <span className="text-[9px] lowercase font-medium opacity-40 tracking-normal font-mono">
-                                                                {colType}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </th>
-                                            );
-                                        })}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-outline/5">
-                                    {sortedResults.map((row, i) => (
-                                        <tr key={i} className="hover:bg-surface-variant/30 transition-colors">
-                                            {Object.values(row).map((val, j) => (
-                                                <td key={j} className="px-5 py-4 text-sm text-on-surface/80 font-mono whitespace-nowrap">
-                                                    {String(val)}
-                                                </td>
+                                                            </div>
+                                                        </th>
+                                                    );
+                                                })}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-outline/5">
+                                            {displayedResults.map((row, i) => (
+                                                <tr key={i} className="hover:bg-surface-variant/30 transition-colors">
+                                                    {Object.values(row).map((val, j) => (
+                                                        <td key={j} className="px-5 py-4 text-sm text-on-surface/80 font-mono whitespace-nowrap">
+                                                            {val === null ? <span className="opacity-20 italic text-xs">NULL</span> : String(val)}
+                                                        </td>
+                                                    ))}
+                                                </tr>
                                             ))}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
-                    </div>
-                )}
-
-                {results && results.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-16 opacity-30 text-center">
-                        <div className="text-5xl mb-4">🔍</div>
-                        <span className="text-sm font-bold uppercase tracking-widest">No results found for this query</span>
-                    </div>
-                )}
-
-                {!results && !error && !loading && (
-                    <div className="h-full flex flex-col items-center justify-center py-20 opacity-20 gap-4">
-                        <div className="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center text-primary text-3xl italic">D</div>
-                        <span className="text-xs font-bold uppercase tracking-[0.2em]">Enter a SQL query to begin</span>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );

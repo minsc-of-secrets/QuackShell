@@ -36,9 +36,13 @@
   "dependencies": {
     "@hono/node-server": "^1.19.7",
     "@monaco-editor/react": "^4.7.0",
+    "@types/react-virtualized-auto-sizer": "^1.0.8",
+    "@types/react-window": "^2.0.0",
     "duckdb": "^1.4.3",
     "hono": "^4.11.3",
     "node-pty": "^1.1.0",
+    "react-virtualized-auto-sizer": "^2.0.1",
+    "react-window": "^2.2.3",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3"
   }

@@ -117,14 +117,14 @@ const FileExplorer: React.FC<FileExplorerProps> = ({ onGenerateQuery }) => {
             onDragLeave={onDragLeave}
             onDrop={onDrop}
         >
-            <div className="flex flex-col w-full p-2">
+            <div className="flex-1 overflow-y-auto w-full p-2 min-h-0">
                 {files.length === 0 ? (
                     <div className="p-8 text-center opacity-40">
                         <div className="text-4xl mb-2">📁</div>
                         <span className="text-xs font-medium tracking-wide">Empty directory</span>
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 pb-4">
                         {files.map((file, index) => (
                             <div
                                 key={index}

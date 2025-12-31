@@ -39,6 +39,63 @@ const db = new duckdb.Database('../my-duckdb.db');
 const conn = db.connect();
 
 // DuckDB API Routes
+app.get('/api/schema', async (c) => {
+  return new Promise<Response>((resolve) => {
+    // Get all tables and their columns in one query using information_schema
+    const sql = `
+      SELECT 
+        table_name, 
+        column_name, 
+        data_type as column_type
+      FROM information_schema.columns 
+      WHERE table_schema = 'main'
+      ORDER BY table_name, ordinal_position;
+    `;
+
+    conn.all(sql, async (err, rows) => {
+      if (err) {
+        return resolve(c.json({ error: err.message }, 500));
+      }
+
+      // Group by table_name
+      const schema: { [key: string]: any[] } = {};
+      rows.forEach((row: any) => {
+        if (!schema[row.table_name]) {
+          schema[row.table_name] = [];
+        }
+        schema[row.table_name].push({
+          name: row.column_name,
+          type: row.column_type
+        });
+      });
+
+      // Get queryable files from CWD
+      let files: string[] = [];
+      try {
+        const allFiles = await fsPromises.readdir('.');
+        files = allFiles.filter(f => /\.(csv|parquet|tsv|json)$/i.test(f));
+      } catch (fErr) {
+        console.error('File list error:', fErr);
+      }
+
+      // Convert to array format
+      const tables = Object.entries(schema).map(([name, columns]) => ({
+        name,
+        columns,
+        type: 'table'
+      }));
+
+      const virtualTables = files.map(name => ({
+        name,
+        type: 'file',
+        columns: [] // Columns will be fetched on demand or we can just leave empty for now
+      }));
+
+      resolve(c.json({ tables: [...tables, ...virtualTables] }));
+    });
+  });
+});
+
 app.post('/api/query', async (c) => {
   const body = await c.req.json();
   const sql = body.sql;
@@ -54,18 +111,21 @@ app.post('/api/query', async (c) => {
         return resolve(c.json({ error: err.message }, 500));
       }
 
-      // 2. Get schema info (only for SELECT-like queries)
-      // Check if it's a query that produces output
-      const isSelectQuery = /^\s*(SELECT|WITH|DESCRIBE|SUMMARIZE|EXPLAIN|PRAGMA|SHOW)/i.test(sql);
+      // 2. Get schema info (only for SELECT-like queries or file references)
+      const isSelectQuery = /^\s*(SELECT|WITH|DESCRIBE|SUMMARIZE|EXPLAIN|PRAGMA|SHOW|FROM|TABLE|VALUES)/i.test(sql);
+      const isMetadataQuery = /^\s*(DESCRIBE|SHOW|EXPLAIN|SUMMARIZE|PRAGMA)/i.test(sql);
 
-      if (isSelectQuery) {
+      if (isSelectQuery && !isMetadataQuery) {
         conn.all(`DESCRIBE (${sql.trim().replace(/;$/, '')});`, (schemaErr, schema) => {
           if (schemaErr) {
-            // Just return rows if schema fails (e.g. for non-describable queries)
             return resolve(c.json({ rows }));
           }
           resolve(c.json({ rows, schema }));
         });
+      } else if (isMetadataQuery) {
+        // For metadata queries, the result itself is the schema information
+        // We can treat the results as schema if they have the expected columns
+        resolve(c.json({ rows, schema: rows }));
       } else {
         resolve(c.json({ rows }));
       }
