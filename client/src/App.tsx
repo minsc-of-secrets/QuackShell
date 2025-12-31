@@ -12,14 +12,13 @@ interface QueryTab {
 }
 
 function App() {
-    const [tabs, setTabs] = useState<QueryTab[]>([
-        { id: '1', name: 'Query 1', sql: 'SELECT * FROM pragma_database_list();' }
-    ]);
+    const [tabs, setTabs] = useState<QueryTab[]>([]);
     const [activeTabId, setActiveTabId] = useState<string>('1');
     const [explorerWidth, setExplorerWidth] = useState(20); // Percentage for explorer
     const [leftTab, setLeftTab] = useState<'files' | 'schema'>('files');
     const [leftPaneWidth, setLeftPaneWidth] = useState(50); // percentage for split between editor and terminal
     const isResizing = useRef(false);
+    const [isInitialized, setIsInitialized] = useState(false);
 
     const handleGenerateQuery = (newSql: string) => {
         // Update the current active tab's SQL
@@ -103,6 +102,51 @@ function App() {
             document.removeEventListener('mouseup', stopResizing);
         };
     }, [handleMouseMove, stopResizing]);
+
+    // Restore tabs from localStorage on mount
+    useEffect(() => {
+        try {
+            const savedTabs = localStorage.getItem('quackshell_editor_tabs');
+            const savedActiveTab = localStorage.getItem('quackshell_active_tab');
+
+            if (savedTabs) {
+                const parsed = JSON.parse(savedTabs);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    setTabs(parsed);
+                    if (savedActiveTab && parsed.some((t: QueryTab) => t.id === savedActiveTab)) {
+                        setActiveTabId(savedActiveTab);
+                    } else {
+                        setActiveTabId(parsed[0].id);
+                    }
+                    setIsInitialized(true);
+                    return;
+                }
+            }
+        } catch (err) {
+            console.error('Failed to restore tabs:', err);
+        }
+
+        // Fallback to default tab if restoration fails or no saved data
+        setTabs([{ id: '1', name: 'Query 1', sql: 'SELECT * FROM pragma_database_list();' }]);
+        setActiveTabId('1');
+        setIsInitialized(true);
+    }, []);
+
+    // Auto-save tabs to localStorage (debounced)
+    useEffect(() => {
+        if (!isInitialized) return; // Don't save during initial load
+
+        const timer = setTimeout(() => {
+            try {
+                localStorage.setItem('quackshell_editor_tabs', JSON.stringify(tabs));
+                localStorage.setItem('quackshell_active_tab', activeTabId);
+            } catch (err) {
+                console.error('Failed to save tabs:', err);
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [tabs, activeTabId, isInitialized]);
 
     return (
         <div className="flex w-screen h-screen overflow-hidden bg-surface text-on-surface font-sans">
