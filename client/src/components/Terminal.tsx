@@ -1,12 +1,18 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import { Terminal as Xterm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import 'xterm/css/xterm.css';
 import io from 'socket.io-client';
 
-const Terminal = () => {
+interface TerminalProps {
+    active: boolean;
+}
+
+const Terminal: React.FC<TerminalProps> = ({ active }) => {
     const terminalRef = useRef<HTMLDivElement>(null);
+    const xtermRef = useRef<Xterm | null>(null);
+    const fitAddonRef = useRef<FitAddon | null>(null);
     const socketRef = useRef<any>(null);
 
     useEffect(() => {
@@ -16,12 +22,13 @@ const Terminal = () => {
         // 2. Initialize xterm.js
         const term = new Xterm({
             cursorBlink: true,
-            fontSize: 14,
+            fontSize: 13,
             fontFamily: 'Menlo, Monaco, "Courier New", monospace',
             theme: {
                 background: '#000000',
                 foreground: '#ffffff',
-                cursor: '#D0BCFF'
+                cursor: '#D0BCFF',
+                selectionBackground: 'rgba(208, 188, 255, 0.3)',
             },
             allowProposedApi: true
         });
@@ -31,10 +38,14 @@ const Terminal = () => {
         term.loadAddon(fitAddon);
         term.loadAddon(webLinksAddon);
 
+        xtermRef.current = term;
+        fitAddonRef.current = fitAddon;
+
         if (terminalRef.current) {
             term.open(terminalRef.current);
-            // Small delay to ensure container is fully rendered
-            setTimeout(() => fitAddon.fit(), 100);
+            setTimeout(() => {
+                if (active) fitAddon.fit();
+            }, 100);
         }
 
         // 3. Handle Terminal Input -> Socket
@@ -49,6 +60,7 @@ const Terminal = () => {
 
         // 5. Handle Resize
         const handleResize = () => {
+            if (!active) return;
             try {
                 fitAddon.fit();
                 socketRef.current?.emit('terminal:resize', {
@@ -56,13 +68,10 @@ const Terminal = () => {
                     rows: term.rows,
                 });
             } catch (e) {
-                // Ignore fit errors on unmounted
+                // Ignore fit errors
             }
         };
         window.addEventListener('resize', handleResize);
-
-        // Initial resize
-        handleResize();
 
         // Cleanup
         return () => {
@@ -72,7 +81,25 @@ const Terminal = () => {
         };
     }, []);
 
-    return <div className="w-full h-full p-2 bg-black overflow-hidden" ref={terminalRef} />;
+    // Effect to refit when tab becomes active
+    useEffect(() => {
+        if (active && fitAddonRef.current && xtermRef.current) {
+            setTimeout(() => {
+                fitAddonRef.current?.fit();
+                socketRef.current?.emit('terminal:resize', {
+                    cols: xtermRef.current?.cols,
+                    rows: xtermRef.current?.rows,
+                });
+            }, 50);
+        }
+    }, [active]);
+
+    return (
+        <div
+            className={`w-full h-full bg-black overflow-hidden ${active ? 'block' : 'hidden'}`}
+            ref={terminalRef}
+        />
+    );
 };
 
-export default Terminal;
+export default memo(Terminal);

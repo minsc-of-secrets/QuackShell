@@ -258,7 +258,6 @@ io.on('connection', (socket) => {
   const shell = process.env.SHELL || (os.platform() === 'win32' ? 'powershell.exe' : '/bin/zsh');
 
   console.log(`Spawning shell: ${shell}`);
-  const homeDir = os.homedir();
 
   let ptyProcess;
   try {
@@ -266,7 +265,7 @@ io.on('connection', (socket) => {
       name: 'xterm-color',
       cols: 80,
       rows: 30,
-      cwd: homeDir,
+      cwd: process.cwd(),
       env: process.env
     });
   } catch (err) {

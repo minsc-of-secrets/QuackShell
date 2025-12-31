@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import Terminal from './components/Terminal';
+import TerminalTabs from './components/TerminalTabs';
 import QueryEditor from './components/QueryEditor';
 import FileExplorer from './components/FileExplorer';
 import SchemaBrowser from './components/SchemaBrowser';
@@ -154,7 +154,7 @@ function App() {
                             </div>
                         </header>
                         <div className="grow bg-[#000000]">
-                            <Terminal />
+                            <TerminalTabs />
                         </div>
                     </section>
                 </div>
