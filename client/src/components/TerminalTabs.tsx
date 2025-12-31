@@ -9,6 +9,8 @@ interface Tab {
 const TerminalTabs = () => {
     const [tabs, setTabs] = useState<Tab[]>([{ id: '1', label: 'Shell 1' }]);
     const [activeTabId, setActiveTabId] = useState<string>('1');
+    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+    const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
     const addTab = () => {
         const newId = crypto.randomUUID();
@@ -19,7 +21,7 @@ const TerminalTabs = () => {
 
     const removeTab = (e: React.MouseEvent, idToRemove: string) => {
         e.stopPropagation();
-        if (tabs.length === 1) return; // Keep at least one tab
+        if (tabs.length === 1) return;
 
         const newTabs = tabs.filter(t => t.id !== idToRemove);
         setTabs(newTabs);
@@ -29,24 +31,65 @@ const TerminalTabs = () => {
         }
     };
 
+    const handleDragStart = (e: React.DragEvent, index: number) => {
+        e.dataTransfer.setData('sourceIndex', index.toString());
+        e.dataTransfer.effectAllowed = 'move';
+        setDraggingIndex(index);
+    };
+
+    const handleDragEnd = () => {
+        setDraggingIndex(null);
+        setDragOverIndex(null);
+    };
+
+    const handleDragOver = (e: React.DragEvent, index: number) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragOverIndex !== index) {
+            setDragOverIndex(index);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+        e.preventDefault();
+        const sourceIndexStr = e.dataTransfer.getData('sourceIndex');
+        if (sourceIndexStr === '') return;
+
+        const sourceIndex = parseInt(sourceIndexStr, 10);
+        if (!isNaN(sourceIndex) && sourceIndex !== targetIndex) {
+            const newTabs = [...tabs];
+            const [movedTab] = newTabs.splice(sourceIndex, 1);
+            newTabs.splice(targetIndex, 0, movedTab);
+            setTabs(newTabs);
+        }
+        setDragOverIndex(null);
+        setDraggingIndex(null);
+    };
+
     return (
         <div className="flex flex-col h-full bg-black overflow-hidden">
             {/* Tab Bar */}
             <div className="flex items-center px-2 bg-surface-container shrink-0 border-b border-white/5 h-10">
                 <div className="flex-1 flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
-                    {tabs.map((tab) => (
+                    {tabs.map((tab, index) => (
                         <div
                             key={tab.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, index)}
+                            onDragEnd={handleDragEnd}
+                            onDragOver={(e) => handleDragOver(e, index)}
+                            onDrop={(e) => handleDrop(e, index)}
                             onClick={() => setActiveTabId(tab.id)}
                             className={`group flex items-center gap-2 px-3 py-1.5 rounded-t-lg transition-all cursor-pointer min-w-[100px] max-w-[200px] ${activeTabId === tab.id
                                     ? 'bg-black text-primary font-bold border-b-2 border-primary'
                                     : 'bg-surface-container-high text-on-surface-variant/60 hover:text-on-surface-variant hover:bg-surface-variant/50'
+                                } ${dragOverIndex === index ? (draggingIndex !== null && draggingIndex < index ? 'border-r-2 border-r-primary' : 'border-l-2 border-l-primary') : ''} ${draggingIndex === index ? 'opacity-30' : ''
                                 }`}
                         >
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-60 shrink-0">
                                 <path d="M4 17l6-6-6-6M12 19h8" />
                             </svg>
-                            <span className="text-[10px] truncate uppercase tracking-wider">{tab.label}</span>
+                            <span className="text-[10px] truncate uppercase tracking-wider select-none">{tab.label}</span>
 
                             {tabs.length > 1 && (
                                 <button

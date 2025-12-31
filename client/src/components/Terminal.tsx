@@ -14,8 +14,14 @@ const Terminal: React.FC<TerminalProps> = ({ active }) => {
     const xtermRef = useRef<Xterm | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
     const socketRef = useRef<any>(null);
+    const initializedRef = useRef(false);
 
     useEffect(() => {
+        // Only initialize once, when the component first becomes active
+        if (!active || initializedRef.current) return;
+
+        initializedRef.current = true;
+
         // 1. Initialize Socket.io
         socketRef.current = io('http://localhost:3001');
 
@@ -44,7 +50,11 @@ const Terminal: React.FC<TerminalProps> = ({ active }) => {
         if (terminalRef.current) {
             term.open(terminalRef.current);
             setTimeout(() => {
-                if (active) fitAddon.fit();
+                try {
+                    fitAddon.fit();
+                } catch (e) {
+                    // Ignore fit errors during initialization
+                }
             }, 100);
         }
 
@@ -60,12 +70,12 @@ const Terminal: React.FC<TerminalProps> = ({ active }) => {
 
         // 5. Handle Resize
         const handleResize = () => {
-            if (!active) return;
+            if (!xtermRef.current || !fitAddonRef.current) return;
             try {
-                fitAddon.fit();
+                fitAddonRef.current.fit();
                 socketRef.current?.emit('terminal:resize', {
-                    cols: term.cols,
-                    rows: term.rows,
+                    cols: xtermRef.current.cols,
+                    rows: xtermRef.current.rows,
                 });
             } catch (e) {
                 // Ignore fit errors
@@ -79,24 +89,29 @@ const Terminal: React.FC<TerminalProps> = ({ active }) => {
             term.dispose();
             window.removeEventListener('resize', handleResize);
         };
-    }, []);
+    }, [active]);
 
     // Effect to refit when tab becomes active
     useEffect(() => {
-        if (active && fitAddonRef.current && xtermRef.current) {
+        if (active && fitAddonRef.current && xtermRef.current && initializedRef.current) {
             setTimeout(() => {
-                fitAddonRef.current?.fit();
-                socketRef.current?.emit('terminal:resize', {
-                    cols: xtermRef.current?.cols,
-                    rows: xtermRef.current?.rows,
-                });
+                try {
+                    fitAddonRef.current?.fit();
+                    socketRef.current?.emit('terminal:resize', {
+                        cols: xtermRef.current?.cols,
+                        rows: xtermRef.current?.rows,
+                    });
+                } catch (e) {
+                    // Ignore fit errors
+                }
             }, 50);
         }
     }, [active]);
 
     return (
         <div
-            className={`w-full h-full bg-black overflow-hidden ${active ? 'block' : 'hidden'}`}
+            className="w-full h-full bg-black overflow-hidden"
+            style={{ display: active ? 'block' : 'none' }}
             ref={terminalRef}
         />
     );

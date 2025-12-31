@@ -3,16 +3,67 @@ import TerminalTabs from './components/TerminalTabs';
 import QueryEditor from './components/QueryEditor';
 import FileExplorer from './components/FileExplorer';
 import SchemaBrowser from './components/SchemaBrowser';
+import EditorTabs from './components/EditorTabs';
+
+interface QueryTab {
+    id: string;
+    name: string;
+    sql: string;
+}
 
 function App() {
-    const [sql, setSql] = useState('SELECT * FROM pragma_database_list();');
+    const [tabs, setTabs] = useState<QueryTab[]>([
+        { id: '1', name: 'Query 1', sql: 'SELECT * FROM pragma_database_list();' }
+    ]);
+    const [activeTabId, setActiveTabId] = useState<string>('1');
     const [explorerWidth, setExplorerWidth] = useState(20); // Percentage for explorer
     const [leftTab, setLeftTab] = useState<'files' | 'schema'>('files');
     const [leftPaneWidth, setLeftPaneWidth] = useState(50); // percentage for split between editor and terminal
     const isResizing = useRef(false);
 
     const handleGenerateQuery = (newSql: string) => {
-        setSql(newSql);
+        // Update the current active tab's SQL
+        setTabs(prev => prev.map(tab =>
+            tab.id === activeTabId ? { ...tab, sql: newSql } : tab
+        ));
+    };
+
+    const addQueryTab = () => {
+        const newId = crypto.randomUUID();
+        const nextNum = tabs.length + 1;
+        setTabs([...tabs, { id: newId, name: `Query ${nextNum}`, sql: '' }]);
+        setActiveTabId(newId);
+    };
+
+    const closeQueryTab = (e: React.MouseEvent, idToRemove: string) => {
+        e.stopPropagation();
+        if (tabs.length === 1) return;
+
+        const newTabs = tabs.filter(t => t.id !== idToRemove);
+        setTabs(newTabs);
+
+        if (activeTabId === idToRemove) {
+            setActiveTabId(newTabs[newTabs.length - 1].id);
+        }
+    };
+
+    const renameQueryTab = (id: string, newName: string) => {
+        setTabs(prev => prev.map(tab =>
+            tab.id === id ? { ...tab, name: newName } : tab
+        ));
+    };
+
+    const setSqlForTab = (id: string, newSql: string) => {
+        setTabs(prev => prev.map(tab =>
+            tab.id === id ? { ...tab, sql: newSql } : tab
+        ));
+    };
+
+    const handleReorderTabs = (sourceIndex: number, targetIndex: number) => {
+        const newTabs = [...tabs];
+        const [movedTab] = newTabs.splice(sourceIndex, 1);
+        newTabs.splice(targetIndex, 0, movedTab);
+        setTabs(newTabs);
     };
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -56,7 +107,7 @@ function App() {
     return (
         <div className="flex w-screen h-screen overflow-hidden bg-surface text-on-surface font-sans">
             {/* M3 Navigation Rail */}
-            <nav className="w-20 h-full bg-surface-container flex flex-col items-center py-4 gap-4 border-r border-outline/10 flex-none">
+            <nav className="w-20 h-full bg-surface-container flex flex-col items-center py-4 gap-4 border-r border-outline/10 flex-none z-30">
                 <button
                     className={`flex flex-col items-center gap-1 group transition-all duration-300 ${explorerWidth > 0 ? 'text-on-primary-container' : 'text-on-surface-variant'}`}
                     onClick={() => setExplorerWidth(explorerWidth > 0 ? 0 : 20)}
@@ -124,14 +175,32 @@ function App() {
                         style={{ width: `${leftPaneWidth}%`, flex: 'none' }}
                     >
                         <header className="px-6 py-4 border-b border-outline/10 flex items-center justify-between h-14 shrink-0">
-                            <span className="text-xs font-bold tracking-widest uppercase opacity-70">Query Workspace</span>
+                            <span className="text-xs font-bold tracking-widest uppercase opacity-70">Workspace</span>
                             <div className="flex items-center gap-2">
                                 <div className="w-2 h-2 rounded-full bg-primary animate-pulse opacity-60"></div>
                                 <span className="text-[10px] font-mono opacity-30">CONNECTED</span>
                             </div>
                         </header>
+
+                        <EditorTabs
+                            tabs={tabs}
+                            activeTabId={activeTabId}
+                            onSelectTab={setActiveTabId}
+                            onAddTab={addQueryTab}
+                            onCloseTab={closeQueryTab}
+                            onRenameTab={renameQueryTab}
+                            onReorderTab={handleReorderTabs}
+                        />
+
                         <div className="grow overflow-hidden relative h-full">
-                            <QueryEditor sql={sql} setSql={setSql} />
+                            {tabs.map((tab) => (
+                                <QueryEditor
+                                    key={tab.id}
+                                    sql={tab.sql}
+                                    setSql={(newSql) => setSqlForTab(tab.id, newSql)}
+                                    active={activeTabId === tab.id}
+                                />
+                            ))}
                         </div>
                     </section>
 

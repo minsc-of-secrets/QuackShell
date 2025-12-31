@@ -85,11 +85,25 @@ app.get('/api/schema', async (c) => {
         type: 'table'
       }));
 
-      const virtualTables = files.map(name => ({
-        name,
-        type: 'file',
-        columns: [] // Columns will be fetched on demand or we can just leave empty for now
-      }));
+      // Fetch column info for each file using DESCRIBE
+      const fileSchemaPromises = files.map(fileName => {
+        return new Promise<{ name: string; columns: any[]; type: string }>((fileResolve) => {
+          conn.all(`DESCRIBE SELECT * FROM '${fileName}' LIMIT 0;`, (descErr, descRows) => {
+            if (descErr) {
+              console.error(`Failed to describe ${fileName}:`, descErr.message);
+              fileResolve({ name: fileName, columns: [], type: 'file' });
+            } else {
+              const columns = descRows.map((row: any) => ({
+                name: row.column_name,
+                type: row.column_type
+              }));
+              fileResolve({ name: fileName, columns, type: 'file' });
+            }
+          });
+        });
+      });
+
+      const virtualTables = await Promise.all(fileSchemaPromises);
 
       resolve(c.json({ tables: [...tables, ...virtualTables] }));
     });

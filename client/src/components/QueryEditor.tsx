@@ -5,6 +5,7 @@ import QuerySidebar from './QuerySidebar';
 interface QueryEditorProps {
     sql: string;
     setSql: (sql: string) => void;
+    active: boolean;
 }
 
 type SortConfig = {
@@ -12,7 +13,7 @@ type SortConfig = {
     direction: 'asc' | 'desc' | null;
 };
 
-const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
+const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
     const [results, setResults] = useState<any[] | null>(null);
     const [schema, setSchema] = useState<any[] | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -22,6 +23,9 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
     const isResizing = useRef(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const [showQuerySidebar, setShowQuerySidebar] = useState(false);
+    const monacoRef = useRef<any>(null);
+    const [dbSchema, setDbSchema] = useState<any[]>([]);
+    const completionProviderRef = useRef<any>(null);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isResizing.current || !containerRef.current) return;
@@ -57,6 +61,36 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
             document.removeEventListener('mouseup', stopResizing);
         };
     }, [handleMouseMove, stopResizing]);
+
+    // Fetch database schema for autocomplete
+    useEffect(() => {
+        const fetchSchema = async () => {
+            try {
+                const res = await fetch('http://localhost:3001/api/schema');
+                const data = await res.json();
+                setDbSchema(data.tables || []);
+            } catch (err) {
+                console.error('Failed to fetch schema for autocomplete:', err);
+            }
+        };
+        fetchSchema();
+    }, []);
+
+    // Cleanup completion provider on unmount
+    useEffect(() => {
+        return () => {
+            if (completionProviderRef.current) {
+                completionProviderRef.current.dispose();
+            }
+        };
+    }, []);
+
+    // Re-layout Monaco when tab becomes active
+    useEffect(() => {
+        if (active && monacoRef.current) {
+            monacoRef.current.layout();
+        }
+    }, [active]);
 
     const runQuery = async () => {
         setLoading(true);
@@ -153,7 +187,11 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
     };
 
     return (
-        <div ref={containerRef} className="flex flex-col h-full w-full overflow-hidden bg-surface-container-lowest">
+        <div
+            ref={containerRef}
+            className="flex flex-col h-full w-full overflow-hidden bg-surface-container-lowest"
+            style={{ display: active ? 'flex' : 'none' }}
+        >
             {/* Editor Area */}
             <div className="relative flex flex-col overflow-hidden shrink-0" style={{ height: `${editorHeight}%` }}>
                 <div className="grow relative min-h-0 w-full">
@@ -163,6 +201,107 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
                         theme="vs-dark"
                         value={sql}
                         onChange={(value) => setSql(value || '')}
+                        onMount={(editor, monaco) => {
+                            monacoRef.current = editor;
+
+                            // Register SQL autocomplete provider
+                            if (completionProviderRef.current) {
+                                completionProviderRef.current.dispose();
+                            }
+
+                            completionProviderRef.current = monaco.languages.registerCompletionItemProvider('sql', {
+                                provideCompletionItems: (model, position) => {
+                                    const textUntilPosition = model.getValueInRange({
+                                        startLineNumber: 1,
+                                        startColumn: 1,
+                                        endLineNumber: position.lineNumber,
+                                        endColumn: position.column,
+                                    }).toUpperCase();
+
+                                    const suggestions: any[] = [];
+
+                                    // SQL Keywords
+                                    const keywords = [
+                                        'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN',
+                                        'GROUP BY', 'ORDER BY', 'HAVING', 'LIMIT', 'OFFSET', 'INSERT INTO', 'VALUES',
+                                        'UPDATE', 'SET', 'DELETE', 'CREATE TABLE', 'DROP TABLE', 'ALTER TABLE',
+                                        'AND', 'OR', 'NOT', 'IN', 'LIKE', 'BETWEEN', 'IS NULL', 'IS NOT NULL',
+                                        'AS', 'DISTINCT', 'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END'
+                                    ];
+
+                                    keywords.forEach(keyword => {
+                                        suggestions.push({
+                                            label: keyword,
+                                            kind: monaco.languages.CompletionItemKind.Keyword,
+                                            insertText: keyword,
+                                            range: {
+                                                startLineNumber: position.lineNumber,
+                                                startColumn: model.getWordUntilPosition(position).startColumn,
+                                                endLineNumber: position.lineNumber,
+                                                endColumn: position.column,
+                                            },
+                                        });
+                                    });
+
+                                    // Table names (suggest after FROM, JOIN, INTO, etc.)
+                                    const tableKeywords = ['FROM', 'JOIN', 'INTO', 'TABLE', 'UPDATE'];
+                                    const shouldSuggestTables = tableKeywords.some(kw =>
+                                        textUntilPosition.includes(kw) &&
+                                        textUntilPosition.lastIndexOf(kw) > textUntilPosition.lastIndexOf('WHERE')
+                                    );
+
+                                    if (shouldSuggestTables || textUntilPosition.trim() === '') {
+                                        dbSchema.forEach((item: any) => {
+                                            const tableName = item.name;
+                                            if (tableName) {
+                                                suggestions.push({
+                                                    label: tableName,
+                                                    kind: monaco.languages.CompletionItemKind.Class,
+                                                    insertText: tableName,
+                                                    detail: item.type === 'table' ? 'Table' : 'File',
+                                                    range: {
+                                                        startLineNumber: position.lineNumber,
+                                                        startColumn: model.getWordUntilPosition(position).startColumn,
+                                                        endLineNumber: position.lineNumber,
+                                                        endColumn: position.column,
+                                                    },
+                                                });
+                                            }
+                                        });
+                                    }
+
+                                    // Column names (suggest after SELECT, WHERE, ORDER BY, GROUP BY, etc.)
+                                    const columnKeywords = ['SELECT', 'WHERE', 'ORDER BY', 'GROUP BY', 'HAVING', 'SET'];
+                                    const shouldSuggestColumns = columnKeywords.some(kw => textUntilPosition.includes(kw));
+
+                                    if (shouldSuggestColumns) {
+                                        dbSchema.forEach((item: any) => {
+                                            if (item.columns && Array.isArray(item.columns)) {
+                                                item.columns.forEach((col: any) => {
+                                                    const columnName = col.name;
+                                                    if (columnName) {
+                                                        suggestions.push({
+                                                            label: columnName,
+                                                            kind: monaco.languages.CompletionItemKind.Field,
+                                                            insertText: columnName,
+                                                            detail: `${col.type || 'Column'} (from ${item.name})`,
+                                                            range: {
+                                                                startLineNumber: position.lineNumber,
+                                                                startColumn: model.getWordUntilPosition(position).startColumn,
+                                                                endLineNumber: position.lineNumber,
+                                                                endColumn: position.column,
+                                                            },
+                                                        });
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    }
+
+                                    return { suggestions };
+                                },
+                            });
+                        }}
                         options={{
                             minimap: { enabled: false },
                             fontSize: 14,
@@ -242,7 +381,7 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
                     {displayedResults && (
                         <div className="flex flex-col gap-4">
                             <div className="flex items-center justify-between px-2 shrink-0">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">
+                                <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">
                                     {results?.length === 0 ? 'Query successful (0 rows)' : `Showing ${displayedResults.length} of ${results?.length} rows`}
                                 </span>
                                 {displayedResults.length > 0 && (
