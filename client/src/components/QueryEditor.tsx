@@ -14,6 +14,7 @@ type SortConfig = {
 
 const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
     const [results, setResults] = useState<any[] | null>(null);
+    const [schema, setSchema] = useState<any[] | null>(null);
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: null });
@@ -115,6 +116,7 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
         setLoading(true);
         setError(null);
         setResults(null);
+        setSchema(null);
         setSortConfig({ key: null, direction: null });
 
         try {
@@ -130,6 +132,7 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
                 setError(data.error);
             } else {
                 setResults(data.rows);
+                setSchema(data.schema || null);
                 // Save to history on success
                 saveToHistory(sql);
             }
@@ -306,24 +309,34 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql }) => {
                             <table className="min-w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-surface-variant">
-                                        {Object.keys(sortedResults[0]).map((col) => (
-                                            <th
-                                                key={col}
-                                                onClick={() => handleSort(col)}
-                                                className="px-5 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline/10 whitespace-nowrap cursor-pointer hover:bg-on-surface-variant/10 transition-colors group select-none"
-                                            >
-                                                <div className="flex items-center gap-2">
-                                                    {col}
-                                                    <span className={`transition-all duration-300 ${sortConfig.key === col ? 'opacity-100 scale-100' : 'opacity-0 scale-50 group-hover:opacity-30'}`}>
-                                                        {sortConfig.key === col && sortConfig.direction === 'desc' ? (
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5z" /></svg>
-                                                        ) : (
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z" /></svg>
+                                        {Object.keys(sortedResults[0]).map((col) => {
+                                            const colType = schema?.find(s => s.column_name === col)?.column_type;
+                                            return (
+                                                <th
+                                                    key={col}
+                                                    onClick={() => handleSort(col)}
+                                                    className="px-5 py-4 text-xs font-bold text-on-surface-variant uppercase tracking-widest border-b border-outline/10 whitespace-nowrap cursor-pointer hover:bg-on-surface-variant/10 transition-colors group select-none"
+                                                >
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <div className="flex items-center gap-2">
+                                                            {col}
+                                                            <span className={`transition-all duration-300 ${sortConfig.key === col ? 'opacity-100 scale-100' : 'opacity-0 scale-50 group-hover:opacity-30'}`}>
+                                                                {sortConfig.key === col && sortConfig.direction === 'desc' ? (
+                                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5z" /></svg>
+                                                                ) : (
+                                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z" /></svg>
+                                                                )}
+                                                            </span>
+                                                        </div>
+                                                        {colType && (
+                                                            <span className="text-[9px] lowercase font-medium opacity-40 tracking-normal font-mono">
+                                                                {colType}
+                                                            </span>
                                                         )}
-                                                    </span>
-                                                </div>
-                                            </th>
-                                        ))}
+                                                    </div>
+                                                </th>
+                                            );
+                                        })}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-outline/5">

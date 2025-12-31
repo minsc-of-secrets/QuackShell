@@ -48,9 +48,24 @@ app.post('/api/query', async (c) => {
   }
 
   return new Promise<Response>((resolve) => {
+    // 1. Get query results
     conn.all(sql, (err, rows) => {
       if (err) {
-        resolve(c.json({ error: err.message }, 500));
+        return resolve(c.json({ error: err.message }, 500));
+      }
+
+      // 2. Get schema info (only for SELECT-like queries)
+      // Check if it's a query that produces output
+      const isSelectQuery = /^\s*(SELECT|WITH|DESCRIBE|SUMMARIZE|EXPLAIN|PRAGMA|SHOW)/i.test(sql);
+
+      if (isSelectQuery) {
+        conn.all(`DESCRIBE (${sql.trim().replace(/;$/, '')});`, (schemaErr, schema) => {
+          if (schemaErr) {
+            // Just return rows if schema fails (e.g. for non-describable queries)
+            return resolve(c.json({ rows }));
+          }
+          resolve(c.json({ rows, schema }));
+        });
       } else {
         resolve(c.json({ rows }));
       }
