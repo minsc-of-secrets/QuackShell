@@ -21,6 +21,8 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
     const [loading, setLoading] = useState(false);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: null });
     const [editorHeight, setEditorHeight] = useState(40); // Initial height percentage for editor
+    const [currentPage, setCurrentPage] = useState(1);
+    const [rowsPerPage, setRowsPerPage] = useState(100);
     const isResizing = useRef(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const [showQuerySidebar, setShowQuerySidebar] = useState(false);
@@ -93,6 +95,11 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
         }
     }, [active]);
 
+    // Reset page when results change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [results]);
+
     const runQuery = async () => {
         setLoading(true);
         setError(null);
@@ -156,8 +163,14 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
 
     const displayedResults = useMemo(() => {
         if (!sortedResults) return null;
-        return sortedResults.slice(0, 1000);
-    }, [sortedResults]);
+        const start = (currentPage - 1) * rowsPerPage;
+        return sortedResults.slice(start, start + rowsPerPage);
+    }, [sortedResults, currentPage, rowsPerPage]);
+
+    const totalPages = useMemo(() => {
+        if (!results) return 0;
+        return Math.ceil(results.length / rowsPerPage);
+    }, [results, rowsPerPage]);
 
     const downloadCSV = () => {
         if (!sortedResults || sortedResults.length === 0) return;
@@ -384,13 +397,65 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                     {displayedResults && (
                         <div className="flex flex-col gap-4">
                             <div className="flex items-center justify-between px-2 shrink-0">
-                                <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">
-                                    {results?.length === 0 ? 'Query successful (0 rows)' : `Showing ${displayedResults.length} of ${results?.length} rows`}
-                                </span>
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">
+                                        {results?.length === 0 ? 'Query successful (0 rows)' : `${results?.length} rows found`}
+                                    </span>
+                                    {results && results.length > 0 && (
+                                        <span className="text-[9px] font-medium opacity-30">
+                                            Showing {(currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, results.length)}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {results && results.length > 0 && (
+                                    <div className="flex items-center gap-6">
+                                        <div className="flex items-center gap-3 bg-surface-variant/20 px-4 py-1.5 rounded-2xl border border-outline/5">
+                                            <button
+                                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                                disabled={currentPage === 1}
+                                                className="p-1 hover:text-primary disabled:opacity-20 transition-all active:scale-90"
+                                                title="Previous Page"
+                                            >
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                            </button>
+
+                                            <div className="flex items-center gap-2 min-w-[80px] justify-center">
+                                                <span className="text-[10px] font-bold tabular-nums">Page {currentPage} / {totalPages}</span>
+                                            </div>
+
+                                            <button
+                                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                                disabled={currentPage === totalPages}
+                                                className="p-1 hover:text-primary disabled:opacity-20 transition-all active:scale-90"
+                                                title="Next Page"
+                                            >
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 bg-surface-variant/20 px-3 py-1.5 rounded-2xl border border-outline/5">
+                                            <span className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">Rows:</span>
+                                            <select
+                                                value={rowsPerPage}
+                                                onChange={(e) => {
+                                                    setRowsPerPage(Number(e.target.value));
+                                                    setCurrentPage(1);
+                                                }}
+                                                className="bg-transparent text-[10px] font-bold border-none focus:ring-0 cursor-pointer appearance-none text-primary hover:opacity-80 transition-opacity"
+                                            >
+                                                {[50, 100, 500, 1000].map(size => (
+                                                    <option key={size} value={size} className="bg-surface-container font-sans">{size}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {displayedResults.length > 0 && (
                                     <button
                                         onClick={downloadCSV}
-                                        className="flex items-center gap-2 px-4 py-2 bg-surface-variant text-on-surface-variant rounded-xl text-xs font-bold transition-all border border-outline/10 hover:bg-primary/10 hover:text-primary"
+                                        className="flex items-center gap-2 px-4 py-2 bg-surface-variant text-on-surface-variant rounded-2xl text-xs font-bold transition-all border border-outline/10 hover:bg-primary/10 hover:text-primary"
                                     >
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -407,6 +472,9 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                                     <table className="min-w-full text-left border-collapse">
                                         <thead>
                                             <tr className="bg-surface-variant/50 sticky top-0 z-10 backdrop-blur-sm">
+                                                <th className="px-5 py-4 text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest border-b border-outline/10 w-12 text-center">
+                                                    #
+                                                </th>
                                                 {Object.keys(displayedResults[0]).map((col) => {
                                                     const colType = schema?.find(s => s.name === col)?.type;
                                                     return (
@@ -436,6 +504,9 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                                         <tbody className="divide-y divide-outline/5">
                                             {displayedResults.map((row, i) => (
                                                 <tr key={i} className="hover:bg-surface-variant/30 transition-colors">
+                                                    <td className="px-5 py-4 text-[10px] text-on-surface/30 font-mono text-center border-r border-outline/5 bg-surface-variant/5">
+                                                        {(currentPage - 1) * rowsPerPage + i + 1}
+                                                    </td>
                                                     {Object.values(row).map((val, j) => (
                                                         <td key={j} className="px-5 py-4 text-sm text-on-surface/80 font-mono whitespace-nowrap">
                                                             {val === null ? <span className="opacity-20 italic text-xs">NULL</span> : String(val)}
