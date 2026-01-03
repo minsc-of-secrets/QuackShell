@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { SchemaRow, DescribeRow, TableSchema, ColumnSchema } from './types';
 import { Server } from 'socket.io';
 import * as pty from 'node-pty';
 import duckdb from 'duckdb';
@@ -58,14 +59,14 @@ app.get('/api/schema', async (c) => {
       }
 
       // Group by table_name
-      const schema: { [key: string]: any[] } = {};
-      rows.forEach((row: any) => {
+      const schema: { [key: string]: ColumnSchema[] } = {};
+      (rows as unknown as SchemaRow[]).forEach((row) => {
         if (!schema[row.table_name]) {
           schema[row.table_name] = [];
         }
         schema[row.table_name].push({
           name: row.column_name,
-          type: row.column_type
+          type: row.data_type
         });
       });
 
@@ -87,13 +88,13 @@ app.get('/api/schema', async (c) => {
 
       // Fetch column info for each file using DESCRIBE
       const fileSchemaPromises = files.map(fileName => {
-        return new Promise<{ name: string; columns: any[]; type: string }>((fileResolve) => {
+        return new Promise<TableSchema>((fileResolve) => {
           conn.all(`DESCRIBE SELECT * FROM '${fileName}' LIMIT 0;`, (descErr, descRows) => {
             if (descErr) {
               console.error(`Failed to describe ${fileName}:`, descErr.message);
               fileResolve({ name: fileName, columns: [], type: 'file' });
             } else {
-              const columns = descRows.map((row: any) => ({
+              const columns = (descRows as DescribeRow[]).map((row) => ({
                 name: row.column_name,
                 type: row.column_type
               }));
@@ -175,8 +176,9 @@ app.post('/api/cwd', async (c) => {
     // Return new file list
     const files = await fsPromises.readdir('.');
     return c.json({ message: 'Directory changed', cwd: process.cwd(), files });
-  } catch (error: any) {
-    return c.json({ error: error.message }, 500);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ error: message }, 500);
   }
 });
 
@@ -184,8 +186,9 @@ app.get('/api/files', async (c) => {
   try {
     const files = await fsPromises.readdir('.');
     return c.json({ files });
-  } catch (error: any) {
-    return c.json({ error: error.message }, 500);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ error: message }, 500);
   }
 });
 
@@ -206,9 +209,10 @@ app.post('/api/upload', async (c) => {
     } else {
       return c.json({ error: 'No file uploaded' }, 400);
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Upload error:', error);
-    return c.json({ error: error.message }, 500);
+    return c.json({ error: message }, 500);
   }
 });
 
@@ -223,8 +227,9 @@ app.post('/api/open-uploads', async (c) => {
       }
     });
     return c.json({ message: 'Opened uploads folder' });
-  } catch (error: any) {
-    return c.json({ error: error.message }, 500);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ error: message }, 500);
   }
 });
 

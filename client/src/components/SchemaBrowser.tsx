@@ -1,18 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-
-interface Column {
-    name: string;
-    type: string;
-}
-
-interface Table {
-    name: string;
-    columns: Column[];
-    type: 'table' | 'file';
-}
+import { TableSchema } from '../types';
 
 const SchemaBrowser = () => {
-    const [tables, setTables] = useState<Table[]>([]);
+    const [tables, setTables] = useState<TableSchema[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
@@ -32,8 +22,9 @@ const SchemaBrowser = () => {
             const data = await response.json();
             if (data.error) throw new Error(data.error);
             setTables(data.tables || []);
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'An error occurred';
+            setError(message);
         } finally {
             setLoading(false);
         }
@@ -43,7 +34,7 @@ const SchemaBrowser = () => {
         fetchSchema();
     }, [fetchSchema]);
 
-    const toggleTable = async (table: Table) => {
+    const toggleTable = async (table: TableSchema) => {
         const next = new Set(expandedTables);
         if (next.has(table.name)) {
             next.delete(table.name);
@@ -59,14 +50,15 @@ const SchemaBrowser = () => {
                     });
                     const data = await res.json();
                     if (data.schema) {
-                        const columns = data.schema.map((s: any) => ({
+                        const columns = data.schema.map((s: { column_name: string; column_type: string }) => ({
                             name: s.column_name,
                             type: s.column_type
                         }));
                         setTables(prev => prev.map(t => t.name === table.name ? { ...t, columns } : t));
                     }
-                } catch (err) {
-                    console.error('Failed to fetch file schema', err);
+                } catch (err: unknown) {
+                    const message = err instanceof Error ? err.message : 'Unknown error';
+                    console.error('Failed to fetch file schema', message);
                 }
             }
             next.add(table.name);

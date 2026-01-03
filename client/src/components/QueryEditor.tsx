@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import QuerySidebar from './QuerySidebar';
+import { TableSchema, ColumnSchema } from '../types';
 
 interface QueryEditorProps {
     sql: string;
@@ -14,8 +15,8 @@ type SortConfig = {
 };
 
 const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
-    const [results, setResults] = useState<any[] | null>(null);
-    const [schema, setSchema] = useState<any[] | null>(null);
+    const [results, setResults] = useState<Record<string, any>[] | null>(null);
+    const [schema, setSchema] = useState<ColumnSchema[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: null });
@@ -24,7 +25,7 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [showQuerySidebar, setShowQuerySidebar] = useState(false);
     const monacoRef = useRef<any>(null);
-    const [dbSchema, setDbSchema] = useState<any[]>([]);
+    const [dbSchema, setDbSchema] = useState<TableSchema[]>([]);
     const completionProviderRef = useRef<any>(null);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -112,8 +113,9 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                 setSchema(data.schema || null);
                 saveToHistory(sql);
             }
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'An error occurred';
+            setError(message);
         } finally {
             setLoading(false);
         }
@@ -210,7 +212,8 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                             }
 
                             completionProviderRef.current = monaco.languages.registerCompletionItemProvider('sql', {
-                                provideCompletionItems: (model, position) => {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                provideCompletionItems: (model: any, position: any) => {
                                     const textUntilPosition = model.getValueInRange({
                                         startLineNumber: 1,
                                         startColumn: 1,
@@ -251,7 +254,7 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                                     );
 
                                     if (shouldSuggestTables || textUntilPosition.trim() === '') {
-                                        dbSchema.forEach((item: any) => {
+                                        dbSchema.forEach((item: TableSchema) => {
                                             const tableName = item.name;
                                             if (tableName) {
                                                 suggestions.push({
@@ -275,9 +278,9 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                                     const shouldSuggestColumns = columnKeywords.some(kw => textUntilPosition.includes(kw));
 
                                     if (shouldSuggestColumns) {
-                                        dbSchema.forEach((item: any) => {
+                                        dbSchema.forEach((item: TableSchema) => {
                                             if (item.columns && Array.isArray(item.columns)) {
-                                                item.columns.forEach((col: any) => {
+                                                item.columns.forEach((col: ColumnSchema) => {
                                                     const columnName = col.name;
                                                     if (columnName) {
                                                         suggestions.push({
@@ -299,7 +302,7 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                                     }
 
                                     return { suggestions };
-                                },
+                                }
                             });
                         }}
                         options={{
@@ -405,7 +408,7 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                                         <thead>
                                             <tr className="bg-surface-variant/50 sticky top-0 z-10 backdrop-blur-sm">
                                                 {Object.keys(displayedResults[0]).map((col) => {
-                                                    const colType = schema?.find(s => s.column_name === col)?.column_type;
+                                                    const colType = schema?.find(s => s.name === col)?.type;
                                                     return (
                                                         <th
                                                             key={col}

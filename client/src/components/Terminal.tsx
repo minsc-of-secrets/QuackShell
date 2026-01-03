@@ -64,7 +64,7 @@ const Terminal: React.FC<TerminalProps> = ({ active }) => {
         });
 
         // 4. Handle Socket Output -> Terminal
-        socketRef.current?.on('terminal:output', (data: any) => {
+        socketRef.current?.on('terminal:output', (data: string) => {
             term.write(data);
         });
 

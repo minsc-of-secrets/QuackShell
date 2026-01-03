@@ -4,12 +4,7 @@ import QueryEditor from './components/QueryEditor';
 import FileExplorer from './components/FileExplorer';
 import SchemaBrowser from './components/SchemaBrowser';
 import EditorTabs from './components/EditorTabs';
-
-interface QueryTab {
-    id: string;
-    name: string;
-    sql: string;
-}
+import { QueryTab } from './types';
 
 function App() {
     const [tabs, setTabs] = useState<QueryTab[]>([]);

@@ -1,11 +1,5 @@
 import { useState, useEffect } from 'react';
-
-interface SavedQuery {
-    id: string;
-    name: string;
-    sql: string;
-    timestamp: number;
-}
+import { SavedQuery } from '../types';
 
 interface QuerySidebarProps {
     isOpen: boolean;
@@ -30,7 +24,7 @@ const QuerySidebar: React.FC<QuerySidebarProps> = ({ isOpen, onClose, onSelectQu
         if (savedItems) setSavedQueries(JSON.parse(savedItems));
     }, [isOpen]);
 
-    const saveToLocalStorage = (key: string, data: any) => {
+    const saveToLocalStorage = (key: string, data: SavedQuery[] | string[]) => {
         localStorage.setItem(key, JSON.stringify(data));
     };
 
