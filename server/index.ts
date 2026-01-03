@@ -6,6 +6,7 @@ import { Server } from 'socket.io';
 import * as pty from 'node-pty';
 import duckdb from 'duckdb';
 import os from 'os';
+import path from 'path';
 
 // Handle BigInt serialization for JSON.stringify
 declare global {
@@ -33,7 +34,10 @@ process.chdir(UPLOADS_DIR_NAME);
 const app = new Hono();
 
 // Enable CORS for frontend dev server
-app.use('/*', cors());
+app.use('/*', cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}));
 
 // DuckDB Setup (persistent DB in parent directory)
 const db = new duckdb.Database('../my-duckdb.db');
@@ -200,8 +204,8 @@ app.post('/api/upload', async (c) => {
     if (file && file instanceof File) {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-      // Save directly to CWD (which is uploads)
-      const filePath = file.name;
+      // Save directly to CWD (which is uploads) - Sanitize filename to prevent path traversal
+      const filePath = path.basename(file.name);
 
       await fsPromises.writeFile(filePath, buffer);
       console.log(`File uploaded: ${file.name}`);
@@ -261,12 +265,13 @@ console.log(`Server is starting on port ${port}...`);
 
 const server = serve({
   fetch: app.fetch,
-  port: port
+  port: port,
+  hostname: '127.0.0.1'
 });
 
 const io = new Server(server, {
   cors: {
-    origin: '*', // Allow all origins for dev
+    origin: 'http://localhost:5173', // Restrict to specific origin
     methods: ['GET', 'POST']
   }
 });
