@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { secureHeaders } from 'hono/secure-headers';
 import { SchemaRow, DescribeRow, TableSchema, ColumnSchema } from './types';
 import { Server } from 'socket.io';
 import * as pty from 'node-pty';
@@ -37,6 +38,20 @@ const app = new Hono();
 app.use('/*', cors({
   origin: 'http://localhost:5173',
   credentials: true
+}));
+
+// Basic security headers and Content Security Policy
+app.use('*', secureHeaders({
+  contentSecurityPolicy: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net"], // Allow Vite and Monaco loading
+    styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+    fontSrc: ["'self'", "https://fonts.gstatic.com"],
+    connectSrc: ["'self'", "ws://localhost:3001", "http://localhost:3001", "ws://127.0.0.1:3001", "http://127.0.0.1:3001"],
+    imgSrc: ["'self'", "data:", "blob:"],
+    objectSrc: ["'none'"],
+    upgradeInsecureRequests: [],
+  },
 }));
 
 // DuckDB Setup (persistent DB in parent directory)
