@@ -24,6 +24,7 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(100);
     const isResizing = useRef(false);
+    const runQueryRef = useRef<(() => Promise<void>) | undefined>(undefined);
     const containerRef = useRef<HTMLDivElement>(null);
     const [showQuerySidebar, setShowQuerySidebar] = useState(false);
     const monacoRef = useRef<any>(null);
@@ -128,6 +129,8 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
         }
     };
 
+    runQueryRef.current = runQuery;
+
     const saveToHistory = (querySql: string) => {
         const history = JSON.parse(localStorage.getItem('queryHistory') || '[]');
         const newHistory = [querySql, ...history.filter((h: string) => h !== querySql)].slice(0, 50);
@@ -218,6 +221,11 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                         onChange={(value) => setSql(value || '')}
                         onMount={(editor, monaco) => {
                             monacoRef.current = editor;
+
+                            // Add Shift+Enter shortcut
+                            editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
+                                runQueryRef.current?.();
+                            });
 
                             // Register SQL autocomplete provider
                             if (completionProviderRef.current) {
@@ -329,6 +337,23 @@ const QueryEditor: React.FC<QueryEditorProps> = ({ sql, setSql, active }) => {
                             fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace",
                         }}
                     />
+                </div>
+
+                {/* Editor Status Bar */}
+                <div className="h-7 bg-surface-container border-t border-outline/5 flex items-center justify-between px-4 shrink-0 z-10">
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-1.5 opacity-30 hover:opacity-60 transition-opacity">
+                            <span className="text-[9px] font-bold uppercase tracking-widest">Execute</span>
+                            <div className="flex items-center gap-1">
+                                <span className="text-[9px] font-mono bg-on-surface-variant/10 px-1 rounded border border-outline/5">Shift</span>
+                                <span className="text-[9px] opacity-30">+</span>
+                                <span className="text-[9px] font-mono bg-on-surface-variant/10 px-1 rounded border border-outline/5">Enter</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="text-[9px] font-mono opacity-20 uppercase tracking-tighter">SQL Mode</div>
+                    </div>
                 </div>
 
                 <QuerySidebar
