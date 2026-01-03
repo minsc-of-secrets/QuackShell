@@ -2,6 +2,8 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
+import { csrf } from 'hono/csrf';
+import { bodyLimit } from 'hono/body-limit';
 import { SchemaRow, DescribeRow, TableSchema, ColumnSchema } from './types';
 import { Server } from 'socket.io';
 import * as pty from 'node-pty';
@@ -51,6 +53,19 @@ app.use('*', secureHeaders({
     imgSrc: ["'self'", "data:", "blob:"],
     objectSrc: ["'none'"],
     upgradeInsecureRequests: [],
+  },
+}));
+
+// Protect against Cross-Site Request Forgery (CSRF)
+app.use('*', csrf({
+  origin: 'http://localhost:5173',
+}));
+
+// Limit request body size to 10MB to prevent DoS
+app.use('*', bodyLimit({
+  maxSize: 10 * 1024 * 1024,
+  onError: (c) => {
+    return c.text('Payload Too Large', 413);
   },
 }));
 
