@@ -1,102 +1,104 @@
 # QuackShell (DuckDB UI with Terminal)
 
-QuackShellは、WebブラウザからDuckDBを操作するためのパワフルな統合開発環境です。SQLクエリエディタ、データビューア、ファイルエクスプローラー、そしてシステムシェルと連携したターミナルをひとつの画面に統合しています。
+[日本語 (Japanese)](README.ja.md)
+
+QuackShell is a powerful integrated development environment for operating DuckDB from a web browser. It integrates a SQL query editor, data viewer, file explorer, and a terminal connected to the system shell into a single screen.
 
 ![QuackShell Mockup](https://via.placeholder.com/1200x600?text=QuackShell+Modern+UI+Design)
 
-## ✨ 主な機能
+## ✨ Key Features
 
-- **SQLクエリエディタ**: Monaco Editorを搭載し、シンタックスハイライト、自動補完に対応。
-- **データ表示**: クエリ結果をインタラクティブなテーブルで表示。クリックひとつでソート可能。
-- **統合ターミナル**: xterm.jsとnode-ptyを使用し、ブラウザ上でローカルのシェル（zsh/bash等）を直接操作。
-- **ファイル管理**: CSV/Parquet等へのクイックアクセス、フォルダのアップロード、macOSネイティブのフォルダ選択機能をサポート。
-- **Material Design 3**: モダンで洗練されたUIデザイン。直感的なペイン分割とレスポンシブな操作感。
+- **SQL Query Editor**: Equipped with Monaco Editor, supporting syntax highlighting and auto-completion.
+- **Data Viewer**: Displays query results in an interactive table. Sortable with a single click.
+- **Integrated Terminal**: Uses xterm.js and node-pty to operate the local shell (zsh/bash, etc.) directly in the browser.
+- **File Management**: Quick access to CSV/Parquet files, folder uploads, and support for native macOS folder selection.
+- **Material Design 3**: Modern and sophisticated UI design. Intuitive pane splitting and responsive operation.
 
-## 🛠 テクノロジースタック
+## 🛠 Tech Stack
 
 ### Frontend
 - **React 19**
 - **Vite**
 - **Tailwind CSS v4**
-- **Monaco Editor** (SQL編集)
-- **Xterm.js** (ターミナル)
-- **Socket.io-client** (通信)
+- **Monaco Editor** (SQL Editing)
+- **Xterm.js** (Terminal)
+- **Socket.io-client** (Communication)
 
 ### Backend
 - **Hono** (Node.js runtime)
-- **DuckDB** (インプロセスDB)
-- **Node-pty** (疑似ターミナル)
-- **Socket.io** (ターミナル通信)
+- **DuckDB** (In-process DB)
+- **Node-pty** (Pseudo-terminal)
+- **Socket.io** (Terminal Communication)
 
-## 🚀 セットアップ
+## 🚀 Setup
 
-### 前提条件
-- Node.js (v18以上推奨)
-- pnpm (推奨)
+### Prerequisites
+- Node.js (v18 or higher recommended)
+- pnpm (Recommended)
 
-### インストール
+### Installation
 
 ```bash
-# リポジトリのクローン
+# Clone the repository
 git clone <repository-url>
 cd duckdb-ui-with-terminal
 
-# 依存関係のインストール
+# Install dependencies
 pnpm install
 ```
 
-### 起動方法
+### How to Start
 
-このプロジェクトは、フロントエンドとバックエンドの2つのサーバーを同時に実行する必要があります。
+This project requires running two servers: frontend and backend.
 
-**1. バックエンドサーバーの起動:**
+**1. Start the Backend Server:**
 ```bash
 npm run server
-# または
+# or
 pnpm run server
 ```
-サーバーは `http://localhost:3001` で起動します。
+The server starts at `http://localhost:3001`.
 
-**2. フロントエンド（Vite）のプロキシ起動:**
+**2. Start the Frontend (Vite) Proxy:**
 ```bash
 npm run dev
-# または
+# or
 pnpm run dev
 ```
-ブラウザで表示されるURL（通常は `http://localhost:5173`）にアクセスしてください。
+Access the URL displayed in the browser (usually `http://localhost:5173`).
 
-## 📂 ファイル構成
+## 📂 File Structure
 
-- `/client`: Reactフロントエンドソースコード
-- `/server`: Honoバックエンドソースコード
-- `/uploads`: デフォルトの作業ディレクトリ（アップロードされたファイルが保存されます）
-- `my-duckdb.db`: 永続化されたDuckDBデータベースファイル
+- `/client`: React frontend source code
+- `/server`: Hono backend source code
+- `/uploads`: Default working directory (uploaded files are saved here)
+- `my-duckdb.db`: Persisted DuckDB database file
 
-## 💡 使い方
+## 💡 Usage
 
-1. **データのインポート**: エクスプローラーのアップロード機能を使用して、CSVやParquetファイルをプロジェクトに追加できます。
-2. **クエリの実行**: クエリエディタにSQLを入力し、実行します。テーブルからファイルを選択すると、自動的に最適な `SELECT` 文が生成されます。
-3. **ターミナル連携**: DuckDB CLIをターミナルで起動したり、システムコマンドを直接実行したりできます。
+1. **Import Data**: Use the Explorer's upload feature to add CSV or Parquet files to the project.
+2. **Execute Queries**: Enter SQL in the query editor and execute. Selecting a file from the table automatically generates an optimal `SELECT` statement.
+3. **Terminal Integration**: Launch the DuckDB CLI in the terminal or execute system commands directly.
 
-## 🗺 ロードマップ
+## 🗺 Roadmap
 
-### ✅ 実装済み
-- [x] **CSVエクスポート**: クエリ結果をブラウザから直接CSVとしてダウンロード。
-- [x] **クエリ履歴と保存**: 実行したSQLを自動記録し、保存・プレビュー・適用が可能。
-- [x] **型情報の表示**: クエリ結果のカラム名の下に、DuckDBのデータ型を表示。
-- [x] **柔軟なレイアウト**: 各ペインのサイズをマウスドラッグで調整可能。
-- [x] **ファイル管理**: ドラッグ&ドロップでのアップロード、OS標準のフォルダ選択。
-- [x] **スキーマブラウザ**: テーブルやフォルダ内のCSV/Parquet構造をツリー表示し、項目を即座にコピー。
-- [x] **マルチタブ・ターミナル**: 複数のシェルセッションをタブで同時に管理・実行。
+### ✅ Implemented
+- [x] **CSV Export**: Download query results directly as CSV from the browser.
+- [x] **Query History & Save**: Automatically records executed SQL, allowing saving, previewing, and applying.
+- [x] **Type Information**: Displays DuckDB data types under column names in query results.
+- [x] **Flexible Layout**: Adjust pane sizes by dragging.
+- [x] **File Management**: Drag & drop uploads, OS standard folder selection.
+- [x] **Schema Browser**: Tree view of tables and CSV/Parquet structures in folders, with instant item copying.
+- [x] **Multi-tab Terminal**: Manage and run multiple shell sessions in tabs simultaneously.
 
-### 🚀 今後の予定
-- [ ] **データビジュアライゼーション**: クエリ結果を棒グラフや折れ線グラフで即座に可視化（Recharts等）。
-- [ ] **マルチタブ・エディタ**: SQLエディタ自体をタブ化し、複数の分析を並行して実行。
-- [ ] **インポートウィザード**: CSV/JSON読み込み時の詳細設定（デリミタ、型指定等）をUIから調整。
-- [ ] **高度な自動補完**: データベース内の実際のテーブル名やカラム名を候補に出すインテリセンス。
-- [ ] **オートセーブ**: 書きかけのSQLをLocal Storageに自動保存し、リロード時の紛失を防止。
-- [ ] **DuckDB-WASM サポート**: サーバーレス環境（ブラウザ完結）で動作するモードの提供。
+### 🚀 Future Plans
+- [ ] **Data Visualization**: Instant visualization of query results with bar or line charts (Recharts, etc.).
+- [ ] **Multi-tab Editor**: Tabbed SQL editor to run multiple analyses in parallel.
+- [ ] **Import Wizard**: Adjust detailed settings (delimiters, types, etc.) automatically when reading CSV/JSON.
+- [ ] **Advanced Auto-completion**: IntelliSense that suggests actual table and column names from the database.
+- [ ] **Auto-save**: Automatically save draft SQL to Local Storage to prevent loss on reload.
+- [ ] **DuckDB-WASM Support**: Provide a mode that runs entirely in the browser (serverless).
 
-## 📄 ライセンス
+## 📄 License
 
 [ISC License](LICENSE)
